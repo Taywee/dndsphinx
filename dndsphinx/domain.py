@@ -153,8 +153,7 @@ class MonsterDirective(SphinxDirective):
         section += table_from_dict(attributes)
         section += table_from_dict(stats)
 
-        section.extend(parse_rst('\n'.join(self.content)).children)
-        #self.state.nested_parse(self.content, self.content_offset, section)
+        self.state.nested_parse(self.content, self.content_offset, section)
         return [section]
 
 class DndDomain(Domain):

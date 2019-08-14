@@ -7,7 +7,7 @@ from setuptools import setup
 
 setup(
     name='dndsphinx',
-    version='0.0.1',
+    version='0.0.2',
     url='https://github.com/Taywee/dndsphinx',
     downnload_url='https://pypi.python.org/pypi/dndsphinx',
     license='GPL3+',

@@ -1,12 +1,13 @@
-from sphinx.domains import Domain
-from sphinx.roles import XRefRole
-from sphinx.util.docutils import SphinxDirective
-from docutils.parsers.rst import directives
+from collections import OrderedDict
 from docutils import nodes
 from docutils.frontend import OptionParser
 from docutils.parsers.rst import Parser
+from docutils.parsers.rst import directives
 from docutils.utils import new_document
-from collections import OrderedDict
+from sphinx.domains import Domain
+from sphinx.roles import XRefRole
+from sphinx.util.docutils import SphinxDirective
+from sphinx.util.nodes import make_refnode
 import re
 import string
 
@@ -111,9 +112,10 @@ def parse_stat(value):
 
 class MonsterDirective(SphinxDirective):
     has_content = True
+    required_arguments = 1
+    final_argument_whitespace = True
 
     option_spec = {
-        'name': directives.unchanged_required,
         'meta': directives.unchanged,
         'ac': directives.unchanged_required,
         'hp': parse_dice,
@@ -139,10 +141,12 @@ class MonsterDirective(SphinxDirective):
             WIS=self.options['wis'],
             CHA=self.options['cha'],
         )
+        name = self.arguments[0]
+        id = 'monster-' + to_id(name)
         
-        section = nodes.section(text=self.options['name'])
-        section['ids'] = ['monster-' + to_id(self.options['name'])]
-        title = nodes.title(text=self.options['name'])
+        section = nodes.section(text=name)
+        section['ids'] = [id]
+        title = nodes.title(text=name)
         section += title
         if 'meta' in self.options:
             metapara = nodes.paragraph()
@@ -154,6 +158,10 @@ class MonsterDirective(SphinxDirective):
         section += table_from_dict(stats)
 
         self.state.nested_parse(self.content, self.content_offset, section)
+
+        # Handle indexes
+        self.env.get_domain('dnd').add_monster(name, id)
+
         return [section]
 
 class DndDomain(Domain):
@@ -161,9 +169,23 @@ class DndDomain(Domain):
     label = 'Dungeons and Dragons'
 
     roles = {
-        'reref': XRefRole(),
+        'monster': XRefRole(),
     }
 
     directives = {
         'monster': MonsterDirective,
     }
+
+    initial_data = {
+        'monster': {},
+    }
+
+    def add_monster(self, name, id):
+        self.data['monster'][name] = {'id': id, 'doc': self.env.docname}
+
+    def resolve_xref(self, env, fromdocname, builder, type, target, node, contnode):
+        if target in self.data[type]:
+            monster = self.data[type][target]
+            return make_refnode(builder, fromdocname, monster['doc'], monster['id'], contnode, monster['id'])
+        else:
+            print(f'Could not match {type} {target}')

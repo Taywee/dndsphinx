@@ -1,10 +1,12 @@
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from docutils import nodes
 from docutils.frontend import OptionParser
 from docutils.parsers.rst import Parser
 from docutils.parsers.rst import directives
 from docutils.utils import new_document
 from sphinx.domains import Domain
+from sphinx.domains import Index
+from sphinx.locale import _
 from sphinx.roles import XRefRole
 from sphinx.util.docutils import SphinxDirective
 from sphinx.util.nodes import make_refnode
@@ -130,9 +132,9 @@ class MonsterDirective(SphinxDirective):
 
     def run(self):
         attributes = OrderedDict()
-        attributes['Armor Class'] = self.options['ac']
-        attributes['Hit Points'] = self.options['hp']
-        attributes['Speed'] = self.options['speed']
+        attributes[_('Armor Class')] = self.options['ac']
+        attributes[_('Hit Points')] = self.options['hp']
+        attributes[_('Speed')] = self.options['speed']
         stats = OrderedDict(
             STR=self.options['str'],
             DEX=self.options['dex'],
@@ -148,11 +150,15 @@ class MonsterDirective(SphinxDirective):
         section['ids'] = [id]
         title = nodes.title(text=name)
         section += title
+
         if 'meta' in self.options:
+            metatext = self.options['meta']
             metapara = nodes.paragraph()
-            meta = nodes.emphasis(text=self.options['meta'])
+            meta = nodes.emphasis(text=metatext)
             metapara += meta
             section += metapara
+        else:
+            metatext = None
 
         section += table_from_dict(attributes)
         section += table_from_dict(stats)
@@ -160,13 +166,39 @@ class MonsterDirective(SphinxDirective):
         self.state.nested_parse(self.content, self.content_offset, section)
 
         # Handle indexes
-        self.env.get_domain('dnd').add_monster(name, id)
+        self.env.get_domain('dnd').add_monster(name, id, metatext)
 
         return [section]
 
+class MonsterIndex(Index):
+    name = 'monsterindex'
+    localname = _('Monster Index')
+    shortname = _('Monster')
+
+    def generate(self, docnames=None):
+        content = defaultdict(list)
+
+        # sort the list of monsters in alphabetical order
+        monsters = list(self.domain.data['monster'].values())
+        monsters = sorted(monsters, key=lambda monster: monster['name'])
+
+        # generate the expected output, shown below, from the above using the
+        # first letter of the monster as a key to group thing
+        #
+        # name, subtype, docname, anchor, extra, qualifier, description
+        #for name, dispname, typ, docname, anchor, _ in monsters:
+        for monster in monsters:
+            content[monster['name'][0].upper()].append(
+                (monster['name'], 0, monster['doc'], monster['id'], monster['doc'], '', monster['meta']))
+
+        # convert the dict to the sorted list of tuples expected
+        content = sorted(content.items())
+
+        return content, True
+
 class DndDomain(Domain):
     name = 'dnd'
-    label = 'Dungeons and Dragons'
+    label = _('Dungeons and Dragons')
 
     roles = {
         'monster': XRefRole(),
@@ -176,12 +208,16 @@ class DndDomain(Domain):
         'monster': MonsterDirective,
     }
 
+    indices = {
+        MonsterIndex,
+    }
+
     initial_data = {
         'monster': {},
     }
 
-    def add_monster(self, name, id):
-        self.data['monster'][name] = {'id': id, 'doc': self.env.docname}
+    def add_monster(self, name, id, meta=None):
+        self.data['monster'][name] = {'name': name, 'id': id, 'doc': self.env.docname, 'meta': meta}
 
     def resolve_xref(self, env, fromdocname, builder, type, target, node, contnode):
         if target in self.data[type]:
